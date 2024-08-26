@@ -4,6 +4,7 @@ from transformers import BitsAndBytesConfig, pipeline
 import whisper
 import gradio as gr
 import time
+import datetime
 import warnings
 import os
 from gtts import gTTS
@@ -11,6 +12,8 @@ from PIL import Image
 
 import nltk
 from nltk import sent_tokenize
+
+import numpy as np
 
 nltk.download('punkt')
 
@@ -33,6 +36,21 @@ class ModelConfig:
         
     def generate_text(self):
         return self.pipe(self.image, padding=True)
+    
+    def cuda_config(self):
+        torch.cuda.is_available()
+        local_gpu = "cuda" if torch.cuda.is_available() else "cpu"
+        model = whisper.load_model("medium", device=local_gpu)
+
+    def history_log(self):
+        timestamp = str(datetime.datetime.now()).replace(" ", "-")
+        logfile = f"log_{timestamp}.txt"
+        with open(logfile, "a", encodings='utf-8') as f:
+            f.write("Log file created at: " + timestamp + "\n")
+            f.write("Model: " + self.pipe + "\n")
+            f.write("Outputs: " + self.pipe(self.image, padding=True) + "\n")
+            f.close()
+            
 
 class nltkConfig:
     def __init__(self, image, pipe):
@@ -48,7 +66,29 @@ class nltkConfig:
         for sent in sent_tokenize(self.outputs[0]["generated_text"]):
             print(sent)
 
+class gradioConfig:
+    def __init__(self, modelconfig):
+        self.modelconfig = modelconfig
+        self.image = gr.inputs.Image()
+        self.outputs = gr.outputs.Textbox()
+        self.title = "Whisper"
+        self.description = "An AI assistant that generates a helpful answer about an image."
+        self.examples = [
+            ["ngolokante.png"]
+        ]
+        self.app = gr.Interface(
+            modelconfig.generate_text,
+            self.image,
+            self.outputs,
+            title=self.title,
+            description=self.description,
+            examples=self.examples
+        )
+        self.app.launch()
+
 if __name__ == "__main__":
     modelconfig = ModelConfig()
     nltkconfig = nltkConfig(modelconfig.image, modelconfig.pipe)
     nltkconfig.get_text()
+    warnings.filterwarnings("ignore")  # ignore built-in warnings
+    gradioconfig = gradioConfig(modelconfig)
